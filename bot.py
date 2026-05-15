@@ -10,7 +10,7 @@ app = Flask(__name__)
 
 # ── Google Sheets setup ──────────────────────────────────────────────────────
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-SHEET_ID = os.environ["GOOGLE_SHEET_ID"]  # ID da sua planilha
+SHEET_ID = os.environ.get("GOOGLE_SHEET_ID", "")  # ID da sua planilha
 
 def get_sheet():
     creds_json = json.loads(os.environ["GOOGLE_CREDENTIALS_JSON"])
