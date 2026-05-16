@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import gspread
@@ -31,38 +32,37 @@ CATEGORIAS = ["Alimentação", "Transporte", "Saúde", "Lazer", "Compras", "Serv
 PARCELAS   = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 
 def menu_pessoas():
-    return "👤 *Quem gastou?*\n\n" + "\n".join(f"{i}. {p}" for i, p in enumerate(PESSOAS, 1))
+    return "👤 *Quem gastou?*\n\n" + "\n".join(f"{i}\\. {p}" for i, p in enumerate(PESSOAS, 1))
 
 def menu_categorias():
-    return "📂 *Qual a categoria?*\n\n" + "\n".join(f"{i}. {c}" for i, c in enumerate(CATEGORIAS, 1))
+    return "📂 *Qual a categoria?*\n\n" + "\n".join(f"{i}\\. {c}" for i, c in enumerate(CATEGORIAS, 1))
 
 def menu_pagamento():
-    return "💳 *Como foi o pagamento?*\n\n1. À Vista\n2. Parcelado"
+    return "💳 *Como foi o pagamento?*\n\n1\\. À Vista\n2\\. Parcelado"
 
 def menu_parcelas():
-    return "🔢 *Em quantas parcelas?*\n\nDigite o número de parcelas (2 a 12):\n\n" + "\n".join(f"{p}. {p}x" for p in PARCELAS)
+    return "🔢 *Em quantas parcelas?*\n\nDigite o número de parcelas \\(2 a 12\\):\n\n" + "\n".join(f"{p}\\. {p}x" for p in PARCELAS)
 
 def resposta_inicial():
     return (
         "💳 *Bot de Gastos do Cartão*\n\n"
         "Me manda uma mensagem no formato:\n"
-        "➡️ *gasto \\[valor\\] \\[descrição\\]*\n\n"
-        "Exemplo: `gasto 45.90 uber`\n\n"
+        "➡️ `gasto 45\\.90 uber`\n\n"
         "Ou digite /resumo pra ver o total do mês\\."
     )
 
 def processar_mensagem(user_id, texto):
-    texto = texto.strip().lower()
+    texto_lower = texto.strip().lower()
     estado = conversas.get(user_id, {})
     etapa  = estado.get("etapa", "inicio")
 
     # ── Resumo ───────────────────────────────────────────────────────────────
-    if texto in ("resumo", "/resumo"):
+    if texto_lower in ("resumo", "/resumo"):
         try:
-            sheet    = get_sheet()
+            sheet     = get_sheet()
             registros = sheet.get_all_records()
             mes_atual = datetime.now(FUSO_BR).strftime("%Y-%m")
-            totais   = {}
+            totais    = {}
             for r in registros:
                 data_str = str(r.get("Data", ""))
                 if not data_str.startswith(mes_atual):
@@ -89,8 +89,8 @@ def processar_mensagem(user_id, texto):
             return f"❌ Erro ao buscar resumo: {e}"
 
     # ── Início de novo gasto ─────────────────────────────────────────────────
-    if texto.startswith("gasto "):
-        partes = texto.split(" ", 2)
+    if texto_lower.startswith("gasto "):
+        partes = texto_lower.split(" ", 2)
         if len(partes) < 3:
             return "❌ Formato inválido\\. Use: `gasto 45\\.90 descrição`"
         try:
@@ -104,7 +104,7 @@ def processar_mensagem(user_id, texto):
     # ── Escolha de pessoa ────────────────────────────────────────────────────
     if etapa == "aguardando_pessoa":
         try:
-            idx = int(texto) - 1
+            idx = int(texto_lower) - 1
             if 0 <= idx < len(PESSOAS):
                 conversas[user_id]["dados"]["pessoa"] = PESSOAS[idx]
                 conversas[user_id]["etapa"] = "aguardando_categoria"
@@ -116,7 +116,7 @@ def processar_mensagem(user_id, texto):
     # ── Escolha de categoria ─────────────────────────────────────────────────
     if etapa == "aguardando_categoria":
         try:
-            idx = int(texto) - 1
+            idx = int(texto_lower) - 1
             if 0 <= idx < len(CATEGORIAS):
                 conversas[user_id]["dados"]["categoria"] = CATEGORIAS[idx]
                 conversas[user_id]["etapa"] = "aguardando_pagamento"
@@ -127,7 +127,7 @@ def processar_mensagem(user_id, texto):
 
     # ── Escolha de pagamento ─────────────────────────────────────────────────
     if etapa == "aguardando_pagamento":
-        if texto in ("1", "à vista", "a vista"):
+        if texto_lower in ("1", "à vista", "a vista"):
             dados = conversas[user_id]["dados"]
             dados["pagamento"]     = "À Vista"
             dados["parcelas"]      = 1
@@ -142,7 +142,7 @@ def processar_mensagem(user_id, texto):
                 f"💰 R$ {dados['valor']:.2f}\n\n"
                 f"1\\. Sim, salvar\n2\\. Não, cancelar"
             )
-        elif texto in ("2", "parcelado"):
+        elif texto_lower in ("2", "parcelado"):
             conversas[user_id]["dados"]["pagamento"] = "Parcelado"
             conversas[user_id]["etapa"] = "aguardando_parcelas"
             return menu_parcelas()
@@ -151,7 +151,7 @@ def processar_mensagem(user_id, texto):
     # ── Escolha de parcelas ──────────────────────────────────────────────────
     if etapa == "aguardando_parcelas":
         try:
-            num_parcelas = int(texto)
+            num_parcelas = int(texto_lower)
             if num_parcelas in PARCELAS:
                 dados = conversas[user_id]["dados"]
                 dados["parcelas"]      = num_parcelas
@@ -173,7 +173,7 @@ def processar_mensagem(user_id, texto):
 
     # ── Confirmação ──────────────────────────────────────────────────────────
     if etapa == "confirmando":
-        if texto in ("1", "sim", "s"):
+        if texto_lower in ("1", "sim", "s"):
             dados     = conversas[user_id]["dados"]
             data_hoje = datetime.now(FUSO_BR).strftime("%Y-%m-%d")
             try:
@@ -200,7 +200,7 @@ def processar_mensagem(user_id, texto):
             except Exception as e:
                 del conversas[user_id]
                 return f"❌ Erro ao salvar na planilha: {e}"
-        elif texto in ("2", "nao", "não", "n", "cancelar"):
+        elif texto_lower in ("2", "nao", "não", "n", "cancelar"):
             del conversas[user_id]
             return "❌ Lançamento cancelado\\.\n\nDigite `gasto \\[valor\\] \\[descrição\\]` pra começar de novo\\."
         return "Digite 1 para confirmar ou 2 para cancelar\\."
@@ -208,24 +208,29 @@ def processar_mensagem(user_id, texto):
     return resposta_inicial()
 
 
-# ── Handlers do Telegram ─────────────────────────────────────────────────────
+# ── Handlers ─────────────────────────────────────────────────────────────────
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(resposta_inicial(), parse_mode="MarkdownV2")
 
+async def resumo_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id  = update.effective_user.id
+    resposta = processar_mensagem(user_id, "resumo")
+    await update.message.reply_text(resposta, parse_mode="MarkdownV2")
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    texto   = update.message.text or ""
+    user_id  = update.effective_user.id
+    texto    = update.message.text or ""
     resposta = processar_mensagem(user_id, texto)
     await update.message.reply_text(resposta, parse_mode="MarkdownV2")
 
-def main():
+async def main():
     token = os.environ["TELEGRAM_BOT_TOKEN"]
     app   = Application.builder().token(token).build()
     app.add_handler(CommandHandler("start",  start))
-    app.add_handler(CommandHandler("resumo", lambda u, c: handle_message(u, c)))
+    app.add_handler(CommandHandler("resumo", resumo_cmd))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     print("Bot Telegram rodando...")
-    app.run_polling()
+    await app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
