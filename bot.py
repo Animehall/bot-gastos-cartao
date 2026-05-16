@@ -1,6 +1,8 @@
 import os
 import json
 import logging
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
 import gspread
 from google.oauth2.service_account import Credentials
@@ -55,7 +57,6 @@ def processar_mensagem(user_id, texto):
     estado = conversas.get(user_id, {})
     etapa  = estado.get("etapa", "inicio")
 
-    # ── Resumo ───────────────────────────────────────────────────────────────
     if texto_lower in ("resumo", "/resumo"):
         try:
             sheet     = get_sheet()
@@ -73,10 +74,8 @@ def processar_mensagem(user_id, texto):
                 except ValueError:
                     valor = 0.0
                 totais[pessoa] = totais.get(pessoa, 0) + valor
-
             if not totais:
                 return "📊 Nenhum gasto registrado este mês ainda."
-
             linhas = [f"📊 Resumo de {datetime.now(FUSO_BR).strftime('%B/%Y')}\n"]
             total_geral = 0
             for pessoa, val in totais.items():
@@ -87,7 +86,6 @@ def processar_mensagem(user_id, texto):
         except Exception as e:
             return f"❌ Erro ao buscar resumo: {e}"
 
-    # ── Início de novo gasto ─────────────────────────────────────────────────
     if texto_lower.startswith("gasto "):
         partes = texto_lower.split(" ", 2)
         if len(partes) < 3:
@@ -100,7 +98,6 @@ def processar_mensagem(user_id, texto):
         conversas[user_id] = {"etapa": "aguardando_pessoa", "dados": {"valor": valor, "descricao": descricao}}
         return menu_pessoas()
 
-    # ── Escolha de pessoa ────────────────────────────────────────────────────
     if etapa == "aguardando_pessoa":
         try:
             idx = int(texto_lower) - 1
@@ -112,7 +109,6 @@ def processar_mensagem(user_id, texto):
             pass
         return f"❌ Digite um número de 1 a {len(PESSOAS)}.\n\n" + menu_pessoas()
 
-    # ── Escolha de categoria ─────────────────────────────────────────────────
     if etapa == "aguardando_categoria":
         try:
             idx = int(texto_lower) - 1
@@ -124,7 +120,6 @@ def processar_mensagem(user_id, texto):
             pass
         return f"❌ Digite um número de 1 a {len(CATEGORIAS)}.\n\n" + menu_categorias()
 
-    # ── Escolha de pagamento ─────────────────────────────────────────────────
     if etapa == "aguardando_pagamento":
         if texto_lower in ("1", "à vista", "a vista"):
             dados = conversas[user_id]["dados"]
@@ -147,7 +142,6 @@ def processar_mensagem(user_id, texto):
             return menu_parcelas()
         return "❌ Digite 1 para À Vista ou 2 para Parcelado.\n\n" + menu_pagamento()
 
-    # ── Escolha de parcelas ──────────────────────────────────────────────────
     if etapa == "aguardando_parcelas":
         try:
             num_parcelas = int(texto_lower)
@@ -170,7 +164,6 @@ def processar_mensagem(user_id, texto):
             pass
         return "❌ Digite um número entre 2 e 12.\n\n" + menu_parcelas()
 
-    # ── Confirmação ──────────────────────────────────────────────────────────
     if etapa == "confirmando":
         if texto_lower in ("1", "sim", "s"):
             dados     = conversas[user_id]["dados"]
@@ -207,9 +200,24 @@ def processar_mensagem(user_id, texto):
     return resposta_inicial()
 
 
+# ── Servidor HTTP simples pra satisfazer o Render ────────────────────────────
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot rodando!")
+    def log_message(self, *args):
+        pass  # silencia logs do HTTP
+
+def iniciar_servidor():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    server.serve_forever()
+
+
 # ── Bot Telegram ──────────────────────────────────────────────────────────────
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-bot   = telebot.TeleBot(TOKEN)
+bot   = telebot.TeleBot(TOKEN, threaded=False)
 
 @bot.message_handler(commands=["start"])
 def handle_start(message):
@@ -217,14 +225,15 @@ def handle_start(message):
 
 @bot.message_handler(commands=["resumo"])
 def handle_resumo(message):
-    resposta = processar_mensagem(message.from_user.id, "resumo")
-    bot.reply_to(message, resposta)
+    bot.reply_to(message, processar_mensagem(message.from_user.id, "resumo"))
 
 @bot.message_handler(func=lambda m: True)
 def handle_message(message):
-    resposta = processar_mensagem(message.from_user.id, message.text or "")
-    bot.reply_to(message, resposta)
+    bot.reply_to(message, processar_mensagem(message.from_user.id, message.text or ""))
 
 if __name__ == "__main__":
+    print("Iniciando servidor HTTP...")
+    t = threading.Thread(target=iniciar_servidor, daemon=True)
+    t.start()
     print("Bot Telegram rodando...")
-    bot.infinity_polling()
+    bot.infinity_polling(timeout=30, long_polling_timeout=20)
