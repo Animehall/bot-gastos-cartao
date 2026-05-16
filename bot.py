@@ -5,6 +5,9 @@ from twilio.twiml.messaging_response import MessagingResponse
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
+import pytz
+
+FUSO_BR = pytz.timezone("America/Sao_Paulo")
 
 app = Flask(__name__)
 
@@ -58,7 +61,7 @@ def processar_mensagem(numero, texto):
         try:
             sheet = get_sheet()
             registros = sheet.get_all_records()
-            mes_atual = datetime.now().strftime("%Y-%m")
+            mes_atual = datetime.now(FUSO_BR).strftime("%Y-%m")
             totais = {}
             for r in registros:
                 data_str = str(r.get("Data", ""))
@@ -71,7 +74,7 @@ def processar_mensagem(numero, texto):
             if not totais:
                 return "📊 Nenhum gasto registrado este mês ainda."
 
-            linhas = [f"📊 *Resumo de {datetime.now().strftime('%B/%Y')}*\n"]
+            linhas = [f"📊 *Resumo de {datetime.now(FUSO_BR).strftime('%B/%Y')}*\n"]
             total_geral = 0
             for pessoa, val in totais.items():
                 linhas.append(f"• {pessoa}: R$ {val:.2f}")
@@ -169,7 +172,7 @@ def processar_mensagem(numero, texto):
     if etapa == "confirmando":
         if texto in ("1", "sim", "s"):
             dados = conversas[numero]["dados"]
-            data_hoje = datetime.now().strftime("%Y-%m-%d")
+            data_hoje = datetime.now(FUSO_BR).strftime("%Y-%m-%d")
             try:
                 salvar_gasto(
                     data_hoje,
@@ -188,7 +191,7 @@ def processar_mensagem(numero, texto):
                 )
                 return (
                     f"✅ *Gasto salvo na planilha!*\n\n"
-                    f"📅 {datetime.now().strftime('%d/%m/%Y')}\n"
+                    f"📅 {datetime.now(FUSO_BR).strftime('%d/%m/%Y')}\n"
                     f"👤 {dados['pessoa']}\n"
                     f"📂 {dados['categoria']}\n"
                     f"📝 {dados['descricao']}\n"
