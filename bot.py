@@ -68,7 +68,11 @@ def processar_mensagem(numero, texto):
                 if not data_str.startswith(mes_atual):
                     continue
                 pessoa = r.get("Quem Gastou", "?")
-                valor = float(str(r.get("Valor Total (R$)", 0)).replace(",", "."))
+                valor_raw = str(r.get("Valor Total (R$)", 0)).replace("R$", "").replace(" ", "").replace(".", "").replace(",", ".")
+                try:
+                    valor = float(valor_raw) if valor_raw else 0.0
+                except ValueError:
+                    valor = 0.0
                 totais[pessoa] = totais.get(pessoa, 0) + valor
 
             if not totais:
