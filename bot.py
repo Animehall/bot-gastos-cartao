@@ -230,7 +230,7 @@ async def main():
     app.add_handler(CommandHandler("resumo", resumo_cmd))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     print("Bot Telegram rodando...")
-    await app.run_polling(allowed_updates=Update.ALL_TYPES)
+    await app.run_polling()
 
 if __name__ == "__main__":
     asyncio.run(main())
