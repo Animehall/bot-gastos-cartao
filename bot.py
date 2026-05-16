@@ -2,6 +2,8 @@ import os
 import json
 import logging
 import threading
+import time
+import urllib.request
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
 import gspread
@@ -231,9 +233,25 @@ def handle_resumo(message):
 def handle_message(message):
     bot.reply_to(message, processar_mensagem(message.from_user.id, message.text or ""))
 
+def keep_alive():
+    """Faz ping no próprio servidor a cada 10 minutos pra não dormir no Render."""
+    url = os.environ.get("RENDER_EXTERNAL_URL", "")
+    if not url:
+        return
+    while True:
+        time.sleep(600)
+        try:
+            urllib.request.urlopen(url, timeout=10)
+            print("Keep-alive: ping enviado")
+        except Exception as e:
+            print(f"Keep-alive erro: {e}")
+
 if __name__ == "__main__":
     print("Iniciando servidor HTTP...")
     t = threading.Thread(target=iniciar_servidor, daemon=True)
     t.start()
+    print("Iniciando keep-alive...")
+    t2 = threading.Thread(target=keep_alive, daemon=True)
+    t2.start()
     print("Bot Telegram rodando...")
     bot.infinity_polling(timeout=30, long_polling_timeout=20)
