@@ -40,7 +40,7 @@ def menu_pagamento():
     return "💳 *Como foi o pagamento?*\n\n1. À Vista\n2. Parcelado"
 
 def menu_parcelas():
-    return "🔢 *Em quantas parcelas?*\n\n" + "\n".join(f"{i}. {p}x" for i, p in enumerate(PARCELAS, 1))
+    return "🔢 *Em quantas parcelas?*\n\nDigite o número de parcelas (2 a 12):\n\n" + "\n".join(f"{p}. {p}x" for p in PARCELAS)
 
 def resposta_inicial():
     return (
@@ -147,10 +147,9 @@ def processar_mensagem(numero, texto):
     # ── Escolha de parcelas ──────────────────────────────────────────────────
     if etapa == "aguardando_parcelas":
         try:
-            idx = int(texto) - 1
-            if 0 <= idx < len(PARCELAS):
+            num_parcelas = int(texto)
+            if num_parcelas in PARCELAS:
                 dados = conversas[numero]["dados"]
-                num_parcelas = PARCELAS[idx]
                 dados["parcelas"] = num_parcelas
                 dados["valor_parcela"] = dados["valor"] / num_parcelas
                 conversas[numero]["etapa"] = "confirmando"
@@ -166,7 +165,7 @@ def processar_mensagem(numero, texto):
                 )
         except ValueError:
             pass
-        return f"❌ Digite um número de 1 a {len(PARCELAS)}.\n\n" + menu_parcelas()
+        return "❌ Digite um número entre 2 e 12.\n\n" + menu_parcelas()
 
     # ── Confirmação ──────────────────────────────────────────────────────────
     if etapa == "confirmando":
